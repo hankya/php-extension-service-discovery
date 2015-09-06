@@ -1,0 +1,4 @@
+libapr1-dev
+libsvn-dev
+phpcpp
+zookeeper c bindings
