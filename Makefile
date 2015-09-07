@@ -87,7 +87,7 @@ LINKER				=	g++
 
 COMPILER_FLAGS		=	-Wall -c -O2 -std=c++11 -fpic -o
 LINKER_FLAGS		=	-shared
-LINKER_DEPENDENCIES	=	-lphpcpp -lzookeeper_mt
+LINKER_DEPENDENCIES	=	/usr/local/lib/libprocess.a /usr/local/lib/libev.a /usr/local/lib/libglog.a -lzookeeper_mt -lphpcpp
 
 
 #

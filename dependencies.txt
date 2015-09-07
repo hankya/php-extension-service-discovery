@@ -2,3 +2,10 @@ libapr1-dev
 libsvn-dev
 phpcpp
 zookeeper c bindings
+libcurl (packages can be found here libcurl4-gnutls-dev libcurl4-nss-dev libcurl4-openssl-dev)
+
+in order to use mesos zookeeper client
+1.
+
+git clone https://github.com/apache/mesos.git
+install all the 3rdparty libraries from libprocess/3rdparty before using it

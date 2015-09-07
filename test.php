@@ -1,3 +1,3 @@
 <?php
-$array = get_service("hello");
-var_dump($array);
+sleep(100);
+var_dump(get_service("hello"));
