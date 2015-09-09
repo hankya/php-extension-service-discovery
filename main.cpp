@@ -5,26 +5,76 @@
 
 const char *Config_Servers_Key = "service-discovery.servers";
 std::map<std::string, Php::Value> services;
+ZooKeeperStorageProcess *zkProcess;
 
-Php::Value getService(Php::Parameters &params) {
-    return services["hello"];
+Php::Array map2Array(std::map<string, Php::Value> &values) {
+    Php::Array array;
+    for (std::map<std::string, Php::Value>::iterator iter = values.begin(); iter != values.end(); ++iter) {
+        array[iter->first] = iter->second;
+    }
+    return array;
 }
 
-//class StateWatcher : public Watcher {
-//public:
-//    StateWatcher() { }
-//
-//private:
-//    virtual void process(int type, int state, int64_t sessionId, const std::string &path);
-//
-//    bool reconnect;
-//
-//    void onConnected(int64_t id, const std::string &basic_string);
-//
-//    void onReconnecting(int64_t id, const std::string &basic_string);
-//
-//    void onExpired(int64_t id, const std::string &basic_string);
-//};
+Php::Value next(Php::Value &service) {
+    int totalWeight = 0;
+    for (Php::Value::iterator iter = service.begin(); iter != service.end(); ++iter) {
+        if (!iter->second.contains(CONFIG_WEIGHT)) {
+            totalWeight = 0;
+            break;
+        }
+        int weight = iter->second.get(CONFIG_WEIGHT);
+        totalWeight += weight;
+    }
+
+    int r = rand();
+    if (totalWeight == 0) {
+        auto step = r % service.count();
+        Php::Value::iterator iter = service.begin();
+        for(int i=0;i<step;i++){
+            iter++;
+        }
+        return iter->second;
+    }
+
+    int calculatedWeight = 0;
+    int i = r % totalWeight;
+    for (Php::Value::iterator iter = service.begin(); iter != service.end(); ++iter) {
+        int weight = iter->second.get(CONFIG_WEIGHT);
+        if (calculatedWeight <= i && i < calculatedWeight + weight) {
+            return iter->second;
+        }
+        calculatedWeight += weight;
+    }
+
+    return false;
+}
+
+Php::Value findService(std::string &serviceName) {
+    std::map<std::string, Php::Value>::iterator find = services.find(serviceName);
+    if (find != services.end()) {
+        return find->second;
+    }
+
+    return false;
+}
+
+Php::Value getService(Php::Parameters &params) {
+    string serviceName = params[0];
+    return findService(serviceName);
+}
+
+Php::Value getOneService(Php::Parameters &params) {
+    string serviceName = params[0];
+    Php::Value service = findService(serviceName);
+    if (service == false || service.count() == 0) {
+        return false;
+    }
+    return next(service);
+}
+
+Php::Value getAllService() {
+    return map2Array(services);
+}
 
 /**
  *  tell the compiler that the get_module is a pure C function
@@ -41,32 +91,36 @@ PHPCPP_EXPORT void *get_module() {
     // static(!) Php::Extension object that should stay in memory
     // for the entire duration of the process (that's why it's static)
     static Php::Extension extension("service-discovery", "1.0");
-//    static int s = zk->getState();
-//    Php::out << "connected to zk" + s << std::endl;
-//    Php::out << zk->message(1) << std::endl;
-//    Php::out.flush();
+
     // @todo    add your own functions, classes, namespaces to the extension
-    extension.add("get_service", getService, {
+    extension.add("service_discovery_get_all", getAllService);
+
+    extension.add("service_discovery_get", getService, {
+            Php::ByVal("service_name", Php::Type::String, true)
+    });
+
+
+    extension.add("service_discovery_get_one", getOneService, {
             Php::ByVal("service_name", Php::Type::String, true)
     });
 
     extension.onShutdown([]() {
         Php::out << "shutting down" << std::endl;
         services.clear();
+        delete zkProcess;
     });
 
     extension.add(Php::Ini(Config_Servers_Key, "notexists:2181"));
     extension.onStartup([]() {
         std::string servers = Php::ini_get(Config_Servers_Key);
-        Php::out << "on starting up, connecting to servers " << servers << std::endl;
-        ZooKeeperStorageProcess *process = new ZooKeeperStorageProcess(servers, Duration::create(60).get(), "/", &services);
-        spawn(process);
-//        no need to initialize the process as it seems spawn will do it
-//        process->initialize();
+        log("on starting up, connecting to servers " + servers);
+        zkProcess = new ZooKeeperStorageProcess(servers, Duration::create(60).get(), "/",
+                                                                       &services);
+        spawn(zkProcess);
         //initialize all values through event func
     });
 
     // return the extension
     return extension;
-    }
+}
 }
